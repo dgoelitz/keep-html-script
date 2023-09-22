@@ -8,6 +8,8 @@
 </head>
 
 <body>
+  <h1>Open the console to play Keep, the board game.</h1>
+  <p>created by David Goelitz</p>
 </body>
 <script>
 
@@ -84,9 +86,7 @@
     for (const deck in decks) {
       shuffle(decks[deck]);
     }
-    console.log("deez decks:", decks);
 
-    rollAllDice(1);
     continueGame();
   }
 
@@ -129,6 +129,7 @@
         initialDraw = false;
         playerTurn = 1;
         console.log("Initial draw is complete.");
+        rollAllDice(1);
         break;
       }
       playerTurn++;
@@ -275,19 +276,19 @@
     document.removeEventListener("keyup", moveSpaceEvent);
     setBoardPosition(moveNumber);
   }
-  
-    function setBoardPosition(moveNumber) {
-      spaces[playerTurn - 1] += moveNumber;
-  
-      if (spaces[playerTurn - 1] > 15) {
-        spaces[playerTurn - 1] -= 16;
-        resetHandSize(moveNumber);
-        return;
-      }
-  
-      console.log(`Player ${playerTurn} moved ${moveNumber} space(s) and landed on a ${board[spaces[playerTurn - 1]]} space.`);
-      landOnSpace();
+
+  function setBoardPosition(moveNumber) {
+    spaces[playerTurn - 1] += moveNumber;
+
+    if (spaces[playerTurn - 1] > 15) {
+      spaces[playerTurn - 1] -= 16;
+      resetHandSize(moveNumber);
+      return;
     }
+
+    console.log(`Player ${playerTurn} moved ${moveNumber} space(s) and landed on a ${board[spaces[playerTurn - 1]]} space.`);
+    landOnSpace();
+  }
 
   function landOnSpace() {
     switch (board[spaces[playerTurn - 1]]) {
@@ -513,8 +514,8 @@
 
           console.log(`Player ${playerTurn} has changed player ${i + 1}'s ${dice[i][j]} dice to ${changeNumber}.`);
           dice[i][j] = changeNumber;
-          passTurn();
           document.removeEventListener("keyup", changeDiceEvent);
+          passTurn();
           continueGame();
           return;
         }
@@ -567,24 +568,28 @@
     attackDamage = parseInt(card[1]);
     playerTakingDamage = 0;
     damageBeingDealt = true;
+
+    if (hands[playerTurn - 1].length < 1) checkForDraw();
+    else swordDamage();
+  }
+
+  function checkForDraw() {
+    let drawGame = true;
+    for (let i = 0; i < players; i++)
+      if (hands[i].length > attackDamage)
+        drawGame = false;
+
+    if (drawGame) {
+      console.log("The game is a draw.");
+      gameOver = true;
+      return;
+    }
+
+    loseTheGame(playerTurn);
     swordDamage();
   }
 
   function swordDamage() {
-    if (hands[playerTurn - 1].length < 1) {
-      let drawGame = true;
-      for (let i = 0; i < players; i++)
-        if (hands[i].length > attackDamage)
-          drawGame = false;
-
-      if (drawGame) {
-        console.log("The game is a draw.");
-        gameOver = true;
-        return;
-      }
-      loseTheGame(playerTurn);
-    }
-
     playerTakingDamage++;
     if (playerTakingDamage === playerTurn || lost[playerTakingDamage - 1]) playerTakingDamage++;
     if (playerTakingDamage > players) {
