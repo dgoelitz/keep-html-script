@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width" />
+  <title>Keep</title>
+</head>
+
+<body>
+</body>
+<script>
+
+  console.log("huh ok");
+
+  const board =
+    ["start", "h", "b", "h", "reroll", "w", "b", "h",
+      "discard", "b", "b", "w", "adjust", "h", "w", "w"];
+
+  let decks = {
+    sword:
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3],
+    shield:
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3],
+    boots:
+      [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5,
+        5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 12]
+  };
+
+  const cardInputKey = {
+    0: 10,
+    q: 11,
+    w: 12,
+    e: 13,
+    r: 14
+  };
+
+  let gameOver = false,
+    players = 4,
+    playerTurn = 1,
+    playerDiscarding = 0,
+    playerTakingDamage = 0,
+    handSize = 7,
+    drawOrDiscardCounter = 0,
+    attackDamage = 0,
+    selectedDice = 0,
+    usingBoots = false,
+    initialDraw = true,
+    gameInDrawOrDiscardLoop = false,
+    changeTurnAfterLoop = false,
+    resettingHand = false,
+    damageBeingDealt = false,
+    dice = [],
+    hands = [],
+    tokens = [],
+    spaces = [],
+    lost = [];
+
+
+  startGame();
+
+  function startGame() {
+    console.log("Select number of players by pressing 2, 3, or 4.")
+    document.addEventListener("keyup", choosePlayersCountEvent);
+  }
+
+  function choosePlayersCountEvent(event) {
+    const selection = parseInt(event.key);
+    if (selection < 2 || selection > 4 || Number.isNaN(selection)) return;
+    players = selection;
+
+    console.log(`Starting game with ${players} players.`);
+    document.removeEventListener("keyup", choosePlayersCountEvent);
+
+    for (let i = 0; i < players; i++) {
+      hands.push([]);
+      tokens.push(true);
+      spaces.push(0);
+      lost.push(false);
+    }
+
+    for (const deck in decks) {
+      shuffle(decks[deck]);
+    }
+    console.log("deez decks:", decks);
+
+    rollAllDice(1);
+    continueGame();
+  }
+
+
+  function continueGame() {
+    if (gameOver) return;
+    if (gameInDrawOrDiscardLoop) {
+      drawOrDiscardLoop();
+      return;
+    }
+    if (resettingHand) {
+      resettingHand = false;
+      landOnSpace();
+      return;
+    }
+    if (damageBeingDealt) {
+      swordDamage();
+      return;
+    }
+    if (changeTurnAfterLoop) {
+      changeTurnAfterLoop = false;
+      passTurn();
+    }
+
+    if (initialDraw) {
+      initialDrawStage();
+    }
+    if (!initialDraw) {
+      playGameStage();
+    }
+  }
+
+  function initialDrawStage() {
+    while (true) {
+      if (hands[playerTurn - 1].length < handSize) {
+        drawCard();
+        break;
+      }
+      if (playerTurn === players) {
+        initialDraw = false;
+        playerTurn = 1;
+        console.log("Initial draw is complete.");
+        break;
+      }
+      playerTurn++;
+    }
+  }
+
+  function playGameStage() {
+    usingBoots = false;
+
+    dice[playerTurn - 1].sort();
+    hands[playerTurn - 1].sort();
+    console.log(`It is player ${playerTurn}'s turn. They can move ${dice[playerTurn - 1][0]}, ${dice[playerTurn - 1][1]}, or ${dice[playerTurn - 1][2]} spaces. Press the number of spaces to move.`);
+    console.log(`
+      The player's hand: ${hands[playerTurn - 1]}.
+      The player's dice: ${dice[playerTurn - 1]}.
+      The board: ${board}.
+      The player is on space ${spaces[playerTurn - 1]} (${board[spaces[playerTurn - 1]]}).
+      Start is considered space 0.
+    `);
+    document.addEventListener("keyup", moveSpaceEvent);
+  }
+
+
+  function rollAllDice(extraDicePlayer) {
+    dice = [];
+    for (let i = 0; i < players; i++) {
+      if (lost[i]) continue;
+      let playerDice = [];
+      playerDice.push(rollDie());
+      playerDice.push(rollDie());
+      if (i === extraDicePlayer - 1) playerDice.push(rollDie());
+      dice.push(playerDice);
+    }
+    console.log("erbody's dice yo:", dice);
+  }
+
+  function rollDie() {
+    return Math.floor((Math.random() * 6) + 1);
+  };
+
+  function shuffle(array) {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex--;
+      [array[currentIndex], array[randomIndex]] = [
+        array[randomIndex], array[currentIndex]];
+    }
+  }
+
+  function passTurn() {
+    if (gameOver) return;
+
+    playerTurn++;
+    if (playerTurn > players) playerTurn = 1;
+
+    if (lost[playerTurn - 1]) {
+      let next = playerTurn + 1;
+      if (next > players) next = 1;
+      dice[next - 1].push(dice[playerTurn - 1].pop());
+
+      console.log(`Player ${playerTurn} has already lost the game.`);
+      passTurn();
+    }
+  }
+
+  function loseTheGame(player) {
+    console.log(`Player ${player} has lost the game.`);
+    lost[player - 1] = true;
+    tokens[player - 1] = false;
+    checkAndResetTokens();
+    drawOrDiscardCounter = 0;
+
+    let playersRemaining = [];
+    for (let i = 0; i < lost.length; i++) if (lost[i] === false) playersRemaining.push(i + 1);
+    if (playersRemaining.length === 1) {
+      console.log(`Player ${playersRemaining[0]} wins the game.`);
+      gameOver = true;
+    }
+  }
+
+  function onlyOneCardToPlay() {
+    if (usingBoots) console.log("You may not play a card because it would cause you to lose the game.");
+    else loseTheGame(playerTurn);
+    passTurn();
+    continueGame();
+  }
+
+  function displayPlayableCards(cardType) {
+    let hasCard = false;
+    let hand = hands[playerTurn - 1];
+    for (let i = 1; i <= hand.length; i++) {
+      let keyToPress = i;
+      if (keyToPress > 9)
+        for (const key in cardInputKey)
+          if (cardInputKey[key] === keyToPress) {
+            keyToPress = key;
+            break;
+          }
+
+      if (hand[i - 1][0] === cardType) {
+        hasCard = true;
+        console.log(`Press ${keyToPress} to play your ${hand[i - 1]} card.`);
+      }
+    }
+
+    return hasCard;
+  }
+
+  function takeCardToPlayInput(event, player) {
+    let input = undefined;
+    if (cardInputKey[event.key]) input = cardInputKey[event.key];
+    else input = parseInt(event.key);
+    if (input < 1 || input > 14 || Number.isNaN(input)) return;
+
+    if (!hands[player - 1][input - 1]) {
+      console.log(`You do not have ${input} cards.`);
+      return;
+    }
+
+    return input;
+  }
+
+  function takeNoAction() {
+    console.log(`Player ${playerTurn} passes their turn.`);
+    passTurn();
+    continueGame();
+  }
+
+
+  function moveSpaceEvent(event) {
+    const moveNumber = parseInt(event.key);
+    if (moveNumber < 1 || moveNumber > 6 || Number.isNaN(moveNumber)) return;
+    let moveDiceIndex = dice[playerTurn - 1].indexOf(moveNumber);
+    if (moveDiceIndex === -1) {
+      console.log(`You do not have a ${moveNumber} dice.`);
+      return;
+    }
+
+    dice[playerTurn - 1].splice(moveDiceIndex, 1);
+    if (dice[playerTurn]) dice[playerTurn].push(moveNumber);
+    else dice[0].push(moveNumber);
+
+    document.removeEventListener("keyup", moveSpaceEvent);
+    setBoardPosition(moveNumber);
+  }
+  
+    function setBoardPosition(moveNumber) {
+      spaces[playerTurn - 1] += moveNumber;
+  
+      if (spaces[playerTurn - 1] > 15) {
+        spaces[playerTurn - 1] -= 16;
+        resetHandSize(moveNumber);
+        return;
+      }
+  
+      console.log(`Player ${playerTurn} moved ${moveNumber} space(s) and landed on a ${board[spaces[playerTurn - 1]]} space.`);
+      landOnSpace();
+    }
+
+  function landOnSpace() {
+    switch (board[spaces[playerTurn - 1]]) {
+      case "w":
+        playSwordCard();
+        break;
+      case "h":
+        playShieldCard();
+        break;
+      case "b":
+        playBootsCard();
+        break;
+      case "start":
+        passTurn();
+        continueGame();
+        break;
+      case "reroll":
+        passTurn();
+        rollAllDice(playerTurn);
+        continueGame();
+        break;
+      case "discard":
+        discard(playerTurn);
+        if (!lost[playerTurn - 1])
+          passTurn();
+        break;
+      case "adjust":
+        adjustDice();
+        break;
+    }
+  }
+
+
+  function drawCard() {
+    if (decks.sword.length === 0 && decks.shield.length === 0 && decks.boots.length === 0) {
+      console.log(`All decks are empty. Player ${playerTurn} cannot draw.`);
+      continueGame();
+    }
+    else {
+      console.log(`Player ${playerTurn} is drawing. Press w, h, or b.`);
+      document.addEventListener("keyup", cardDrawEvent);
+    }
+  }
+
+  function cardDrawEvent(event) {
+    let cardDrawn = false;
+    if (event.key === "w") {
+      if (decks.sword.length === 0) {
+        console.log("The sword deck is empty.");
+        return;
+      }
+      console.log(`Player ${playerTurn} drew a sword card.`);
+      hands[playerTurn - 1].push("w" + decks.sword.pop());
+      cardDrawn = true;
+    }
+    else if (event.key === "h") {
+      if (decks.shield.length === 0) {
+        console.log("The shield deck is empty.");
+        return;
+      }
+      console.log(`Player ${playerTurn} drew a shield card.`);
+      hands[playerTurn - 1].push("h" + decks.shield.pop());
+      cardDrawn = true;
+    }
+    else if (event.key === "b") {
+      if (decks.boots.length === 0) {
+        console.log("The boots deck is empty.");
+        return;
+      }
+      console.log(`Player ${playerTurn} drew a boots card.`);
+      hands[playerTurn - 1].push("b" + decks.boots.pop());
+      cardDrawn = true;
+    }
+
+    if (cardDrawn) {
+      console.log(hands[playerTurn - 1]);
+      document.removeEventListener("keyup", cardDrawEvent);
+      continueGame();
+    }
+  }
+
+  function discard(player) {
+    if (hands[player - 1].length <= 1) {
+      loseTheGame(player);
+      if (playerTurn === player)
+        passTurn();
+      continueGame();
+      return;
+    }
+
+    console.log(`Player ${player} is discarding.`);
+    console.log(`The player's hand: ${hands[player - 1]}.`);
+    for (let i = 1; i <= hands[player - 1].length; i++) {
+      let keyToPress = i;
+
+      if (keyToPress > 9)
+        for (const key in cardInputKey)
+          if (cardInputKey[key] === keyToPress) {
+            keyToPress = key;
+            break;
+          }
+
+      console.log(`Press ${keyToPress} to discard your ${hands[player - 1][i - 1]} card.`);
+    }
+    playerDiscarding = player;
+    document.addEventListener("keyup", discardEvent);
+  }
+
+  function discardEvent(event) {
+    let discardNumber = takeCardToPlayInput(event, playerDiscarding);
+    if (discardNumber === undefined) return;
+
+    console.log(`Player ${playerDiscarding} has discarded a ${hands[playerDiscarding - 1][discardNumber - 1]} card.`);
+    hands[playerDiscarding - 1].splice(discardNumber - 1, 1);
+    document.removeEventListener("keyup", discardEvent);
+
+    continueGame();
+  }
+
+  function drawOrDiscardLoop() {
+    gameInDrawOrDiscardLoop = true;
+    if (drawOrDiscardCounter > 0) {
+      drawOrDiscardCounter--;
+      drawCard();
+      return;
+    }
+
+    if (drawOrDiscardCounter < 0) {
+      drawOrDiscardCounter++;
+      discard(playerDiscarding);
+      return;
+    }
+
+    gameInDrawOrDiscardLoop = false;
+    continueGame();
+  }
+
+  function resetHandSize(moveNumber) {
+    console.log(`Player ${playerTurn} moved ${moveNumber} space(s) and landed on a ${board[spaces[playerTurn - 1]]} space.`);
+    console.log(`Player ${playerTurn} also passed start.`);
+
+    drawOrDiscardCounter = handSize - hands[playerTurn - 1].length;
+    if (drawOrDiscardCounter !== 0) {
+      console.log(`Player ${playerTurn} must reset their hand size to ${handSize}.`);
+      resettingHand = true;
+      playerDiscarding = playerTurn;
+      drawOrDiscardLoop();
+    }
+
+    tokens[playerTurn - 1] = false;
+    checkAndResetTokens();
+
+    if (resettingHand === false) landOnSpace();
+  }
+
+  function checkAndResetTokens() {
+    if (tokens.indexOf(true) === -1) {
+      handSize--;
+      for (let i = 0; i < tokens.length; i++)
+        if (!lost[i])
+          tokens[i] = true;
+
+      console.log(`All players have passed start. The default hand size is now ${handSize}.`);
+    }
+  }
+
+
+  function adjustDice() {
+    console.log(`Player ${playerTurn} will adjust one dice.`);
+    let diceAdjustIndex = 1;
+    for (let i = 0; i < dice.length; i++) {
+      for (let j = 0; j < dice[i].length; j++) {
+        if (!lost[i]) {
+          console.log(`Press ${diceAdjustIndex} to change player ${i + 1}'s ${dice[i][j]} dice.`);
+        }
+        diceAdjustIndex++;
+      }
+    }
+    document.addEventListener("keyup", selectAdjustDiceEvent);
+  }
+
+  function selectAdjustDiceEvent(event) {
+    const diceNumber = parseInt(event.key);
+    if (diceNumber < 1 || diceNumber > 9 || Number.isNaN(diceNumber)) return;
+
+    if (players < 4 && diceNumber > 7) {
+      console.log(`There are less than 4 players. There is no dice number ${diceNumber}.`);
+      return;
+    }
+    if (players < 3 && diceNumber > 5) {
+      console.log(`There are less than 3 players. There is no dice number ${diceNumber}.`);
+      return;
+    }
+
+    let diceAdjustIndex = 1;
+    for (let i = 0; i < dice.length; i++) {
+      for (let j = 0; j < dice[i].length; j++) {
+        if (diceAdjustIndex === diceNumber && lost[i]) {
+          console.log(`Player ${i + 1} has already lost the game and their dice cannot be changed.`);
+          return;
+        }
+        diceAdjustIndex++;
+      }
+    }
+
+    console.log("Press the number that you would like to change the dice to.");
+    selectedDice = diceNumber;
+    document.removeEventListener("keyup", selectAdjustDiceEvent);
+    document.addEventListener("keyup", changeDiceEvent);
+  }
+
+  function changeDiceEvent(event) {
+    const changeNumber = parseInt(event.key);
+    if (changeNumber < 1 || changeNumber > 6 || Number.isNaN(changeNumber)) return;
+    let diceAdjustIndex = 1;
+    for (let i = 0; i < dice.length; i++) {
+      for (let j = 0; j < dice[i].length; j++) {
+        if (diceAdjustIndex === selectedDice) {
+          if (changeNumber === dice[i][j]) {
+            console.log(`The dice is already set to ${changeNumber}. You must change the dice.`);
+            return;
+          }
+
+          console.log(`Player ${playerTurn} has changed player ${i + 1}'s ${dice[i][j]} dice to ${changeNumber}.`);
+          dice[i][j] = changeNumber;
+          passTurn();
+          document.removeEventListener("keyup", changeDiceEvent);
+          continueGame();
+          return;
+        }
+        diceAdjustIndex++;
+      }
+    }
+  }
+
+
+  function playSwordCard() {
+    let hasCard = displayPlayableCards("w");
+
+    if (!hasCard) {
+      if (usingBoots) {
+        console.log("You do not have a sword card to play.");
+        passTurn();
+        continueGame();
+        return;
+      }
+      console.log("You do not have a sword card to play and must discard instead.");
+      discard(playerTurn);
+      passTurn();
+      return;
+    }
+
+    if (usingBoots)
+      console.log("You may press p to pass and take no action.");
+
+    document.addEventListener("keyup", swordEvent);
+  }
+
+  function swordEvent(event) {
+    if (event.key === "p" && usingBoots === true) {
+      document.removeEventListener("keyup", swordEvent);
+      takeNoAction();
+      return;
+    }
+    let chosenCard = takeCardToPlayInput(event, playerTurn);
+    if (chosenCard === undefined) return;
+
+    let card = hands[playerTurn - 1][chosenCard - 1];
+    if (card[0] !== "w") {
+      console.log("You must play a sword card.");
+      return;
+    }
+
+    hands[playerTurn - 1].splice(chosenCard - 1, 1);
+    document.removeEventListener("keyup", swordEvent);
+
+    attackDamage = parseInt(card[1]);
+    playerTakingDamage = 0;
+    damageBeingDealt = true;
+    swordDamage();
+  }
+
+  function swordDamage() {
+    if (hands[playerTurn - 1].length < 1) {
+      let drawGame = true;
+      for (let i = 0; i < players; i++)
+        if (hands[i].length > attackDamage)
+          drawGame = false;
+
+      if (drawGame) {
+        console.log("The game is a draw.");
+        gameOver = true;
+        return;
+      }
+      loseTheGame(playerTurn);
+    }
+
+    playerTakingDamage++;
+    if (playerTakingDamage === playerTurn || lost[playerTakingDamage - 1]) playerTakingDamage++;
+    if (playerTakingDamage > players) {
+      damageBeingDealt = false;
+      passTurn();
+      continueGame();
+      return;
+    }
+
+    console.log(`Player ${playerTakingDamage} is taking damage.`);
+    playerDiscarding = playerTakingDamage;
+    drawOrDiscardCounter = attackDamage * -1;
+    drawOrDiscardLoop();
+  }
+
+
+  function playShieldCard() {
+    if (hands[playerTurn - 1].length <= 1) {
+      onlyOneCardToPlay();
+      return;
+    }
+
+    let hasCard = displayPlayableCards("h");
+
+    if (!hasCard) {
+      if (usingBoots) {
+        console.log("You do not have a shield card to play.");
+        passTurn();
+        continueGame();
+        return;
+      }
+      console.log("You do not have a shield card to play and must discard instead.");
+      discard(playerTurn);
+      passTurn();
+      return;
+    }
+
+    if (usingBoots)
+      console.log("You may press p to pass and take no action.");
+
+    document.addEventListener("keyup", shieldEvent);
+  }
+
+  function shieldEvent(event) {
+    if (event.key === "p" && usingBoots === true) {
+      document.removeEventListener("keyup", shieldEvent);
+      takeNoAction();
+      return;
+    }
+    let chosenCard = takeCardToPlayInput(event, playerTurn);
+    if (chosenCard === undefined) return;
+
+    let card = hands[playerTurn - 1][chosenCard - 1];
+    if (card[0] !== "h") {
+      console.log("You must play a shield card.");
+      return;
+    }
+
+    hands[playerTurn - 1].splice(chosenCard - 1, 1);
+    document.removeEventListener("keyup", shieldEvent);
+
+    changeTurnAfterLoop = true;
+    drawOrDiscardCounter = parseInt(card[1]);
+    drawOrDiscardLoop();
+  }
+
+
+  function playBootsCard() {
+    if (hands[playerTurn - 1].length <= 1) {
+      onlyOneCardToPlay();
+      return;
+    }
+
+    let hasCard = displayPlayableCards("b");
+
+    if (!hasCard) {
+      if (usingBoots) {
+        console.log("You do not have a boots card to play.");
+        passTurn();
+        continueGame();
+        return;
+      }
+      console.log("You do not have a boots card to play and must discard instead.");
+      discard(playerTurn);
+      passTurn();
+      return;
+    }
+
+    if (usingBoots)
+      console.log("You may press p to pass and take no action.");
+
+    document.addEventListener("keyup", bootsEvent);
+  }
+
+  function bootsEvent(event) {
+    if (event.key === "p" && usingBoots === true) {
+      document.removeEventListener("keyup", bootsEvent);
+      takeNoAction();
+      return;
+    }
+    let chosenCard = takeCardToPlayInput(event, playerTurn);
+    if (chosenCard === undefined) return;
+
+    let card = hands[playerTurn - 1][chosenCard - 1];
+    if (card[0] !== "b") {
+      console.log("You must play a boots card.");
+      return;
+    }
+
+    hands[playerTurn - 1].splice(chosenCard - 1, 1);
+    usingBoots = true;
+    document.removeEventListener("keyup", bootsEvent);
+    setBoardPosition(parseInt(card.slice(1)));
+  }
+
+</script>
+
+</html>
